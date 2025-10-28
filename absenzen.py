@@ -69,14 +69,14 @@ vacation_dates = dict(zip([tagderarbeit, auffahrt, pfingsten], [1,2,1]))
 
 st.title("Absenzenübersicht Ermittler")
 # read csv file
-uploaded_file = st.file_uploader("Lade die Absenzen Datei export.csv hoch")
+uploaded_file = st.file_uploader("'export.csv'")
 
 if uploaded_file is not None:
     df = pd.read_csv(uploaded_file, sep=';', encoding='utf-8')
-    if st.button("Die hochgeladene Datei"):
+    if st.button("export.csv"):
         st.write(df)
 else:
-    st.error("Bitte lade die Absenzen Datei hoch.")
+    st.error("Bitte gib die  Absenzen Datei 'export.csv' an.")
     st.stop()
 #df = pd.read_csv(csv_path, sep=';', encoding='utf-8') # to debug
 
@@ -97,24 +97,30 @@ df['Abw. von']= np.hstack([datetime.strptime(date_str.split(', ')[1], '%d.%m.%Y'
 # filter the dataframe for the current semester
 df_current_semester = df[(df['Abw. von'] >= start_date) & (df['Abw. von']<= end_date)].reset_index(drop=True)
 
+
 # if no absences in this semester return error
 if len(df_current_semester) ==0:
     st.error("Keine Absenzen in diesem Semester")
 else:
-    # filter duplicate absences
-    df_current_semester = df_current_semester.drop_duplicates(subset=['Name', 'Abw. von'])
+    # join first and last name
+    df_current_semester['Name'] = df_current_semester['Vorname'] + ' ' + df_current_semester['Name']
 
     # Sort by name and date
-    df_current_semester_sorted = df_current_semester.sort_values(['Name', 'Abw. von'])
+    df_current_semester_sorted_base = df_current_semester.sort_values(['Name', 'Abw. von'])
 
-    # join first and last name
-    df_current_semester_sorted['Name'] = df_current_semester_sorted['Vorname'] + ' ' + df_current_semester_sorted['Name']
+    
+    
+    # filter duplicate absences
+    df_current_semester_sorted = df_current_semester_sorted_base.drop_duplicates(subset=['Name', 'Abw. von'])
 
     # count the number of absences for each student. only zeugnisrelevant and non Jokertag absences are counted
     names = df_current_semester_sorted['Name'].unique()
     df_current_semester_sorted= df_current_semester_sorted[df_current_semester_sorted["Typ"]=="zeugnisrelevant"]
     df_current_semester_sorted= df_current_semester_sorted[df_current_semester_sorted["Grund"]!="Jokertag"]
 
+    # count total missed lections
+    counted_lections = df_current_semester_sorted.groupby('Name')['Abs. P.'].sum()
+    
     # Split table unexcused absences and excused absences
     df_current_semester_sorted_excused = df_current_semester_sorted[df_current_semester_sorted['Entsch.'] == "Ja"].reset_index(drop=True)
     df_current_semester_sorted_unexcused = df_current_semester_sorted[df_current_semester_sorted['Entsch.'] == "Nein"].reset_index(drop=True)
@@ -124,7 +130,7 @@ else:
     df_excused_absences_counted = df_excused_absences.groupby('Name')['Abw. von'].count().reset_index()
     df_excused_absences_counted.columns = ['Name', 'Entschuldigte Absenzenereignisse']
 
-    df_excused_absences
+
     # return how many unexcused absences each student has
     df_unexcused_absences = is_valid_absence(df_current_semester_sorted_unexcused)
     df_unexcused_absences_counted = df_unexcused_absences.groupby('Name')['Abw. von'].count().reset_index()
@@ -145,11 +151,14 @@ else:
 
     # merge the third column into one
     df_filtered_absences_seven = pd.merge(df_filtered_absences, df_unexcused_past_seven_counted, on='Name', how='outer')
-    
+    df_filtered_absences_seven['verpasste Lektionen'] = df_filtered_absences_seven['Name'].map(counted_lections)
+    #df_filtered_absences_seven_lections = pd.merge (df_filtered_absences_seven, df_counted_lections, on='Name', how = 'outer')
+  
+
     # add a column with the total number of absences
     df_filtered_absences_seven['Total Absenzenereignisse'] = df_filtered_absences_seven['Entschuldigte Absenzenereignisse'].fillna(0) + df_filtered_absences_seven['Unentschuldigte Absenzenereignisse'].fillna(0)
 
-    df_filtered_absences_seven = df_filtered_absences_seven[['Name','Total Absenzenereignisse','Entschuldigte Absenzenereignisse','Unentschuldigte Absenzenereignisse','Davon noch entschuldbar']]
+    df_filtered_absences_seven = df_filtered_absences_seven[['Name','Total Absenzenereignisse','Entschuldigte Absenzenereignisse','Unentschuldigte Absenzenereignisse','Davon noch entschuldbar', 'verpasste Lektionen']]
 
     # Return all dates for excused and unexcused absences
     excused_dates = df_excused_absences.groupby('Name')['Abw. von'].apply(
@@ -180,10 +189,11 @@ else:
     )
   
     
-    df_absences_excused_unexcused
-    st.subheader("Gebündelte Absenzen einzelner SchülerInnen")
+  
+    st.subheader("Absenzeneinträge einzelner SchülerInnen (ungebündelt)")
+    st.text('Jokertage und zeugnisunrelevante Absenzenereignisse werden nicht berücksichtigt.')
     studentsel= st.selectbox("SchülerIn", df_filtered_absences_seven_overlap["Name"] )
-    studentsel_table= df_absences_excused_unexcused[df_absences_excused_unexcused["Name"]==studentsel].iloc[:,3:17]
+    studentsel_table= df_current_semester_sorted_base [df_current_semester_sorted_base ["Name"]==studentsel].iloc[:,3:17]
     result= studentsel_table.reset_index(drop=True)
     result.index = result.index+1
     st.write(result)
@@ -196,4 +206,4 @@ else:
 
     )
 
-st.markdown("Das Programm befindet sich in der Beta Phase. Bitte meldet Fehler oder Verbesserungsvorschläge an julia.nguyen@sbl.ch")
+st.markdown("Das Programm befindet sich in der Beta Phase. Bitte meldet Fehler oder Verbesserungsvorschläge an julia.saner@sbl.ch")
