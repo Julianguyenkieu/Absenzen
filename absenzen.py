@@ -1,9 +1,7 @@
 import pandas as pd
 import numpy as np
 from datetime import datetime
-import re
 import streamlit as st
-import pymupdf
 
 
 def is_valid_absence(df_tobe_filtered) -> pd.DataFrame: 
@@ -16,7 +14,7 @@ def is_valid_absence(df_tobe_filtered) -> pd.DataFrame:
     Parameters:
     df_tobe_filtered (DataFrame): DataFrame containing the absences to be filtered.
     Returns:
-    DataFrame: Filtered DataFrame containing only valid absences.
+    DataFrame: Filtered DataFrame containing only valid absence counts.
     """
     valid_absences = []
     for name in names:
@@ -117,19 +115,20 @@ else:
     df_current_semester_sorted= df_current_semester_sorted[df_current_semester_sorted["Typ"]=="zeugnisrelevant"]
     df_current_semester_sorted= df_current_semester_sorted[df_current_semester_sorted["Grund"]!="Jokertag"]
 
-    # Split table unexcused absences and valid absences
+    # Split table unexcused absences and excused absences
     df_current_semester_sorted_excused = df_current_semester_sorted[df_current_semester_sorted['Entsch.'] == "Ja"].reset_index(drop=True)
     df_current_semester_sorted_unexcused = df_current_semester_sorted[df_current_semester_sorted['Entsch.'] == "Nein"].reset_index(drop=True)
 
     # return how many excused absences each student has
     df_excused_absences = is_valid_absence(df_current_semester_sorted_excused)
     df_excused_absences_counted = df_excused_absences.groupby('Name')['Abw. von'].count().reset_index()
-    df_excused_absences_counted.columns = ['Name', 'Entschuldigte Absenzen dieses Semester']
+    df_excused_absences_counted.columns = ['Name', 'Entschuldigte Absenzenereignisse']
 
+    df_excused_absences
     # return how many unexcused absences each student has
     df_unexcused_absences = is_valid_absence(df_current_semester_sorted_unexcused)
     df_unexcused_absences_counted = df_unexcused_absences.groupby('Name')['Abw. von'].count().reset_index()
-    df_unexcused_absences_counted.columns = ['Name', 'Unentschuldigte Absenzen dieses Semester']
+    df_unexcused_absences_counted.columns = ['Name', 'Unentschuldigte Absenzenereignisse']
 
     # merge the two dataframes into one
     df_absences_excused_unexcused = pd.concat([df_excused_absences, df_unexcused_absences], ignore_index=True).sort_values(['Name', 'Abw. von'])
@@ -146,9 +145,11 @@ else:
 
     # merge the third column into one
     df_filtered_absences_seven = pd.merge(df_filtered_absences, df_unexcused_past_seven_counted, on='Name', how='outer')
-
+    
     # add a column with the total number of absences
-    df_filtered_absences_seven['Total Absenzen dieses Semester'] = df_filtered_absences_seven['Entschuldigte Absenzen dieses Semester'] + df_filtered_absences_seven['Unentschuldigte Absenzen dieses Semester'].fillna(0)
+    df_filtered_absences_seven['Total Absenzenereignisse'] = df_filtered_absences_seven['Entschuldigte Absenzenereignisse'].fillna(0) + df_filtered_absences_seven['Unentschuldigte Absenzenereignisse'].fillna(0)
+
+    df_filtered_absences_seven = df_filtered_absences_seven[['Name','Total Absenzenereignisse','Entschuldigte Absenzenereignisse','Unentschuldigte Absenzenereignisse','Davon noch entschuldbar']]
 
     # Return all dates for excused and unexcused absences
     excused_dates = df_excused_absences.groupby('Name')['Abw. von'].apply(
@@ -169,7 +170,7 @@ else:
     #df_filtered_absences_seven_overlap.to_csv(csv_path_out_a, sep=';', encoding='utf-8', index=False)
 
     st.subheader("Absenzenübersicht")
-    st.text("Klicke auf die Spaltenüberschrift, um die Tabelle zu sortieren und lade die Datei herunter.")
+    st.text("Folgende Absenzenübersicht gilt für das laufende Semester. Klicke auf die Spaltenüberschrift, um die Tabelle zu sortieren und lade die Datei herunter.")
     st.write(df_filtered_absences_seven_overlap)
     st.download_button(
         label="Download Absenzenübersicht",
@@ -177,7 +178,9 @@ else:
         file_name='Absenzenübersicht.csv',
         mime='text/csv'
     )
-
+  
+    
+    df_absences_excused_unexcused
     st.subheader("Gebündelte Absenzen einzelner SchülerInnen")
     studentsel= st.selectbox("SchülerIn", df_filtered_absences_seven_overlap["Name"] )
     studentsel_table= df_absences_excused_unexcused[df_absences_excused_unexcused["Name"]==studentsel].iloc[:,3:17]
